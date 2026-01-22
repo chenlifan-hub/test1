@@ -24,7 +24,7 @@ pipeline {
         // 👇 安全打印所有环境变量（可选）
         stage('Debug: Print Env Vars') {
             steps {
-                sh 'printenv | sort'
+                sh 'printenv'
             }
         }
     }

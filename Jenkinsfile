@@ -19,7 +19,18 @@ pipeline {
                 sh 'ls'
             }
         }
+
+        // 👇 新增：打印所有环境变量（用于调试）
+        stage('Debug: Print All Env Vars') {
+            steps {
+                script {
+                    echo "=== 所有 Jenkins 环境变量 ==="
+                    env.getEnvironment().each { key, value ->
+                        echo "${key} = ${value}"
+                    }
+                    echo "=== 环境变量打印完成 ==="
+                }
+            }
+        }
     }
-
 }
-

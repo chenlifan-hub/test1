@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        FEISHU_WEBHOOK = 'https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-token'
+        FEISHU_WEBHOOK = 'https://open.feishu.cn/open-apis/bot/v2/hook/8a4975a6-87e0-4160-bbb9-bcc7737fc497'
     }
 
     stages {

@@ -9,6 +9,8 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                // 👇 直接获取 commit 信息
+                sh 'echo "Commit message: $(git log -1 --pretty=%s)"'
             }
         }
 
@@ -19,16 +21,10 @@ pipeline {
             }
         }
 
-        // ✅ 安全方式：打印所有环境变量
+        // 👇 安全打印所有环境变量（可选）
         stage('Debug: Print Env Vars') {
             steps {
-                script {
-                    echo "=== 所有 Jenkins 环境变量 (安全方式) ==="
-                    env.each { key, value ->
-                        echo "${key} = ${value}"
-                    }
-                    echo "=== 打印完成 ==="
-                }
+                sh 'printenv | sort'
             }
         }
     }

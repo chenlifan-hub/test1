@@ -35,6 +35,7 @@ post {
                           "项目：${env.JOB_NAME}\n" +
                           "编号：#${env.BUILD_NUMBER}\n" +
                           "提交：${env.COMMIT_MESSAGE ?: '无'}\n" +
+                          "ss：#${env.GIT_COMMIT}\n" +
                           "详情：${env.BUILD_URL}"
 
             // 转义 JSON 特殊字符

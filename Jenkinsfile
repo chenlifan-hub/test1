@@ -5,12 +5,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                script {
-                    env.COMMIT_MESSAGE = sh(
-                        script: 'git log -1 --pretty=%s',
-                        returnStdout: true
-                    ).trim()
-                }
+
             }
         }
 

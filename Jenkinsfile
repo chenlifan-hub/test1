@@ -64,25 +64,24 @@ post {
             def jsonPayload = groovy.json.JsonOutput.toJson(payload)
             def timestamp = System.currentTimeMillis() / 1000
 
-            // ✅ 关键修复：显式转为字符串
-            def signingSecretStr = credentials(env.FEISHU_SIGNING_SECRET_ID).toString()
+            // 从凭据获取签名密钥（自动注入到环境变量更安全）
+            withCredentials([string(credentialsId: 'c95c0f38-db1c-4175-b8ed-c17c32c5d65a', variable: 'FEISHU_SIGN')]) {
+                sh """
+                    # 准备签名字符串：timestamp + "\\n" + body
+                    SIGN_STR="${timestamp}\\n${jsonPayload}"
 
-            def signStr = "${timestamp}\n${jsonPayload}"
+                    # 使用 openssl 计算 HMAC-SHA256 并 Base64 编码
+                    SIGNATURE=\$(echo -n "\$SIGN_STR" | openssl dgst -sha256 -hmac "\$FEISHU_SIGN" -binary | base64)
 
-            // 计算 HMAC-SHA256 签名
-            def hmac = javax.crypto.Mac.getInstance("HmacSHA256")
-            def secretKey = new javax.crypto.spec.SecretKeySpec(signingSecretStr.bytes, "HmacSHA256")
-            hmac.init(secretKey)
-            def signature = hmac.doFinal(signStr.bytes).encodeBase64().toString()
-
-            sh """
-                curl -X POST \\
-                  -H 'Content-Type: application/json' \\
-                  -H 'X-Lark-Timestamp: ${timestamp}' \\
-                  -H 'X-Lark-Signature: ${signature}' \\
-                  -d '${jsonPayload}' \\
-                  '${env.FEISHU_WEBHOOK}'
-            """
+                    # 发送请求
+                    curl -X POST \\
+                      -H 'Content-Type: application/json' \\
+                      -H "X-Lark-Timestamp: ${timestamp}" \\
+                      -H "X-Lark-Signature: \$SIGNATURE" \\
+                      -d '${jsonPayload}' \\
+                      'https://open.feishu.cn/open-apis/bot/v2/hook/b56f684a-9c78-4aec-b525-4d1a2e8998cc'
+                """
+            }
         }
     }
 }

@@ -2,15 +2,19 @@ pipeline {
     agent any
 
     environment {
-        GITHUB_REPO = 'https://github.com/Hiveagents-ones/Hive.git' 
+        FEISHU_WEBHOOK = 'https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-token'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
-                // 👇 直接获取 commit 信息
-                sh 'echo "Commit message: $(git log -1 --pretty=%s)"'
+                script {
+                    env.COMMIT_MESSAGE = sh(
+                        script: 'git log -1 --pretty=%s',
+                        returnStdout: true
+                    ).trim()
+                }
             }
         }
 
@@ -20,11 +24,46 @@ pipeline {
                 sh 'ls'
             }
         }
+    }
 
-        // 👇 安全打印所有环境变量（可选）
-        stage('Debug: Print Env Vars') {
-            steps {
-                sh 'printenv'
+    post {
+        always {
+            script {
+                def statusEmoji = currentBuild.result == 'SUCCESS' ? '✅' : '❌'
+                def statusText = currentBuild.result ?: 'RUNNING'
+
+                def message = """
+                ## Jenkins 构建通知
+                - 任务名称: ${env.JOB_NAME}
+                - 任务编号: #${env.BUILD_NUMBER}
+                - ${statusEmoji} 构建状态: ${statusText}
+                - Commit message: ${env.COMMIT_MESSAGE}
+                - 链接: [查看详情](${env.BUILD_URL})
+                """
+
+                def payload = [
+                    msg_type: 'interactive',
+                    card: [
+                        config: [wide_screen_mode: true],
+                        header: [
+                            title: [tag: 'plain_text', content: "构建 ${statusText}"],
+                            template: currentBuild.result == 'SUCCESS' ? 'green' : 'red'
+                        ],
+                        elements: [
+                            [
+                                tag: 'div',
+                                text: [tag: 'lark_md', content: message]
+                            ]
+                        ]
+                    ]
+                ]
+
+                sh """
+                    curl -X POST \\
+                      -H 'Content-Type: application/json' \\
+                      -d '${payload.toPrettyString()}' \\
+                      '${env.FEISHU_WEBHOOK}'
+                """
             }
         }
     }

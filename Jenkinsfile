@@ -34,9 +34,9 @@ post {
             def message = "${emoji} ${title}\n" +
                           "项目：${env.JOB_NAME}\n" +
                           "编号：#${env.BUILD_NUMBER}\n" +
-                          "分支：#${env.GIT_BRANCH}\n" +
+                          "分支：${env.GIT_BRANCH}\n" +
                           "提交：${env.COMMIT_MESSAGE ?: '无'}\n" +
-                          "Verified：#${env.GIT_COMMIT}\n" +
+                          "Verified：${env.GIT_COMMIT}\n" +
                           "详情：${env.BUILD_URL}"
 
             // 转义 JSON 特殊字符

@@ -29,6 +29,7 @@ pipeline {
         }
     }
 
+
 post {
     always {
         script {
@@ -64,33 +65,41 @@ post {
             def jsonPayload = groovy.json.JsonOutput.toJson(payload)
             def timestamp = System.currentTimeMillis() / 1000
 
-            withCredentials([string(credentialsId: 'c95c0f38-db1c-4175-b8ed-c17c32c5d65a', variable: 'FEISHU_SIGN')]) {
-                // 1. 构造签名字符串：timestamp + "\n" + json
-                def signStr = "${timestamp}\n${jsonPayload}"
-
-                // 2. 计算 HMAC-SHA256 签名（Groovy 原生）
-                def hmac = javax.crypto.Mac.getInstance("HmacSHA256")
-                def secretKey = new javax.crypto.spec.SecretKeySpec(FEISHU_SIGN.getBytes(), "HmacSHA256")
-                hmac.init(secretKey)
-                def signatureBytes = hmac.doFinal(signStr.getBytes())
-                def signature = signatureBytes.encodeBase64().toString()
-
-                // 3. 发送请求（使用 Jenkins 内置 HTTPRequest）
-                try {
-                    httpRequest(
-                        url: 'https://open.feishu.cn/open-apis/bot/v2/hook/b56f684a-9c78-4aec-b525-4d1a2e8998cc',
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: jsonPayload,
-                        customHeaders: [
-                            [name: 'X-Lark-Timestamp', value: "${timestamp}"],
-                            [name: 'X-Lark-Signature', value: signature]
-                        ]
-                    )
-                    echo "✅ 飞书通知已发送"
-                } catch (Exception e) {
-                    echo "❌ 发送飞书通知失败: ${e.message}"
-                }
+            withCredentials([string(credentialsId: 'c95c0f38-db1c-4175-b8ed-c17c32c5d65a', variable: 'FEISHU_SECRET')]) {
+                // 将 JSON 写入临时文件
+                writeFile file: "${env.WORKSPACE}/feishu_payload.json", text: jsonPayload
+                
+                // 使用纯 Shell 脚本计算签名（避免 Groovy/Shell 变量混合）
+                sh """
+                    #!/bin/bash
+                    TIMESTAMP=${timestamp}
+                    SECRET="${FEISHU_SECRET}"
+                    
+                    # 读取 JSON 内容
+                    JSON_CONTENT=\$(cat '${env.WORKSPACE}/feishu_payload.json')
+                    
+                    # 构造签名字符串（注意：不需要额外换行，openssl 会自动处理）
+                    SIGN_STRING="\${TIMESTAMP}\\\\n\${JSON_CONTENT}"
+                    
+                    # 计算签名
+                    # 使用 printf 避免添加额外的换行符
+                    SIGNATURE=\$(printf "%s" "\$SIGN_STRING" | openssl dgst -sha256 -hmac "\$SECRET" -binary | base64)
+                    
+                    echo "Timestamp: \${TIMESTAMP}"
+                    echo "Signature: \${SIGNATURE}"
+                    
+                    # 发送请求
+                    curl -X POST \\
+                         -H 'Content-Type: application/json' \\
+                         -H "X-Lark-Timestamp: \${TIMESTAMP}" \\
+                         -H "X-Lark-Signature: \${SIGNATURE}" \\
+                         -d "@${env.WORKSPACE}/feishu_payload.json" \\
+                         '${FEISHU_WEBHOOK}' \\
+                         --verbose
+                    
+                    # 清理临时文件
+                    rm -f '${env.WORKSPACE}/feishu_payload.json'
+                """
             }
         }
     }

@@ -26,45 +26,49 @@ pipeline {
         }
     }
 
-    post {
-        always {
-            script {
-                def statusEmoji = currentBuild.result == 'SUCCESS' ? '✅' : '❌'
-                def statusText = currentBuild.result ?: 'RUNNING'
+post {
+    always {
+        script {
+            // ✅ 直接使用全限定类名，不要 import！
+            def statusEmoji = currentBuild.result == 'SUCCESS' ? '✅' : '❌'
+            def statusText = currentBuild.result ?: 'RUNNING'
 
-                def message = """
-                ## Jenkins 构建通知
-                - 任务名称: ${env.JOB_NAME}
-                - 任务编号: #${env.BUILD_NUMBER}
-                - ${statusEmoji} 构建状态: ${statusText}
-                - Commit message: ${env.COMMIT_MESSAGE}
-                - 链接: [查看详情](${env.BUILD_URL})
-                """
+            def message = """
+            ## Jenkins 构建通知
+            - 任务名称: ${env.JOB_NAME}
+            - 任务编号: #${env.BUILD_NUMBER}
+            - ${statusEmoji} 构建状态: ${statusText}
+            - Commit message: ${env.COMMIT_MESSAGE}
+            - 链接: [查看详情](${env.BUILD_URL})
+            """
 
-                def payload = [
-                    msg_type: 'interactive',
-                    card: [
-                        config: [wide_screen_mode: true],
-                        header: [
-                            title: [tag: 'plain_text', content: "构建 ${statusText}"],
-                            template: currentBuild.result == 'SUCCESS' ? 'green' : 'red'
-                        ],
-                        elements: [
-                            [
-                                tag: 'div',
-                                text: [tag: 'lark_md', content: message]
-                            ]
+            def payload = [
+                msg_type: 'interactive',
+                card: [
+                    config: [wide_screen_mode: true],
+                    header: [
+                        title: [tag: 'plain_text', content: "构建 ${statusText}"],
+                        template: currentBuild.result == 'SUCCESS' ? 'green' : 'red'
+                    ],
+                    elements: [
+                        [
+                            tag: 'div',
+                            text: [tag: 'lark_md', content: message]
                         ]
                     ]
                 ]
+            ]
 
-                sh """
-                    curl -X POST \\
-                      -H 'Content-Type: application/json' \\
-                      -d '${payload.toPrettyString()}' \\
-                      '${env.FEISHU_WEBHOOK}'
-                """
-            }
+            // ✅ 关键：直接使用 groovy.json.JsonOutput.toJson()
+            def jsonPayload = groovy.json.JsonOutput.toJson(payload)
+
+            sh """
+                curl -X POST \\
+                  -H 'Content-Type: application/json' \\
+                  -d '${jsonPayload}' \\
+                  '${env.FEISHU_WEBHOOK}'
+            """
         }
     }
+}
 }

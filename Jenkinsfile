@@ -64,23 +64,33 @@ post {
             def jsonPayload = groovy.json.JsonOutput.toJson(payload)
             def timestamp = System.currentTimeMillis() / 1000
 
-            // 从凭据获取签名密钥（自动注入到环境变量更安全）
             withCredentials([string(credentialsId: 'c95c0f38-db1c-4175-b8ed-c17c32c5d65a', variable: 'FEISHU_SIGN')]) {
+                // 将 JSON 写入临时文件，避免 Shell 解析问题
+                def tempJsonFile = "${env.WORKSPACE}/feishu_payload.json"
+                sh "echo '${jsonPayload}' > '${tempJsonFile}'"
+
                 sh """
-                    # 准备签名字符串：timestamp + "\\n" + body
-                    SIGN_STR="${timestamp}\\n${jsonPayload}"
-
-                    # 使用 openssl 计算 HMAC-SHA256 并 Base64 编码
-                    SIGNATURE=\$(echo -n "\$SIGN_STR" | openssl dgst -sha256 -hmac "\$FEISHU_SIGN" -binary | base64)
-
+                    # 读取 JSON 内容（确保原样）
+                    JSON_CONTENT=\$(cat '${tempJsonFile}')
+                    
+                    # 构造签名字符串：timestamp + "\\n" + json
+                    # 注意：必须用 printf %s 来避免额外换行
+                    SIGN_STR="\${TIMESTAMP}\\n\${JSON_CONTENT}"
+                    
+                    # 计算签名
+                    SIGNATURE=\$(printf '%s' "\$SIGN_STR" | openssl dgst -sha256 -hmac "\$FEISHU_SIGN" -binary | base64)
+                    
                     # 发送请求
                     curl -X POST \\
                       -H 'Content-Type: application/json' \\
                       -H "X-Lark-Timestamp: ${timestamp}" \\
                       -H "X-Lark-Signature: \$SIGNATURE" \\
-                      -d '${jsonPayload}' \\
+                      -d "@${tempJsonFile}" \\
                       'https://open.feishu.cn/open-apis/bot/v2/hook/b56f684a-9c78-4aec-b525-4d1a2e8998cc'
-                """
+                    
+                    # 清理
+                    rm -f '${tempJsonFile}'
+                """.replace('${TIMESTAMP}', "${timestamp}") // 手动替换变量（避免 Shell 冲突）
             }
         }
     }

@@ -26,26 +26,32 @@ pipeline {
 post {
     always {
         script {
-            def statusEmoji = currentBuild.result == 'SUCCESS' ? '✅' : '❌'
-            def statusText = currentBuild.result ?: 'RUNNING'
+            def status = currentBuild.result ?: 'SUCCESS'
+            def isSuccessful = (status == 'SUCCESS')
+            def emoji = isSuccessful ? '✅' : '❌'
+            def title = isSuccessful ? '构建成功' : '构建失败'
 
-            // 构造纯文本消息（避免 Markdown 特殊字符）
-            def message = "Jenkins构建通知\n" +
-                          "任务名称: ${env.JOB_NAME}\n" +
-                          "任务编号: #${env.BUILD_NUMBER}\n" +
-                          "状态: ${statusEmoji} ${statusText}\n" +
-                          "Commit: ${env.COMMIT_MESSAGE}\n" +
-                          "链接: ${env.BUILD_URL}"
+            def message = "${emoji} ${title}\n" +
+                          "项目：${env.JOB_NAME}\n" +
+                          "编号：#${env.BUILD_NUMBER}\n" +
+                          "提交：${env.COMMIT_MESSAGE ?: '无'}\n" +
+                          "详情：${env.BUILD_URL}"
 
-            // 转义 JSON 中的特殊字符（主要是双引号、换行）
-            def escapedMessage = message.replace('"', '\\"').replace('\n', '\\n')
+            // 转义 JSON 特殊字符
+            def escapedMessage = message
+                .replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace('\n', '\\n')
 
-            sh """
-                curl -X POST \\
-                  -H 'Content-Type: application/json' \\
-                  -d '{"msg_type":"text","content":{"text":"${escapedMessage}"}}' \\
-                  'https://open.feishu.cn/open-apis/bot/v2/hook/b56f684a-9c78-4aec-b525-4d1a2e8998cc'
-            """
+            // 从 Jenkins 凭据中读取飞书 webhook token
+            withCredentials([string(credentialsId: 'c95c0f38-db1c-4175-b8ed-c17c32c5d65a', variable: 'FEISHU_WEBHOOK_TOKEN')]) {
+                sh """
+                    curl -X POST \\
+                      -H 'Content-Type: application/json' \\
+                      -d '{"msg_type":"text","content":{"text":"${escapedMessage}"}}' \\
+                      "https://open.feishu.cn/open-apis/bot/v2/hook/\$FEISHU_WEBHOOK_TOKEN"
+                """
+            }
         }
     }
 }

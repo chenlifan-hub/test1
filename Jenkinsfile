@@ -32,7 +32,7 @@ post {
             def title = isSuccessful ? '构建成功' : '构建失败'
 
             def message = "${emoji} ${title}\n" +
-                          "项目：${env.JOB_NAME}\n" +
+                          "项目：${env.JOB_BASE_NAME}\n" +
                           "编号：#${env.BUILD_NUMBER}\n" +
                           "分支：${env.GIT_BRANCH}\n" +
                           "提交：${env.COMMIT_MESSAGE ?: '无'}\n" +

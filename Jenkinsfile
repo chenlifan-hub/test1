@@ -10,6 +10,10 @@ pipeline {
                         script: 'git log -1 --pretty=%s',
                         returnStdout: true
                     ).trim()
+                    env.COMMIT_AUTHOR = sh(
+                        script: 'git log -1 --pretty=%an',
+                        returnStdout: true
+                    ).trim()
                 }
             }
         }
@@ -36,6 +40,7 @@ post {
                           "编号：#${env.BUILD_NUMBER}\n" +
                           "分支：${env.GIT_BRANCH}\n" +
                           "提交：${env.COMMIT_MESSAGE ?: '无'}\n" +
+                          "作者：${env.COMMIT_AUTHOR ?: '未知'}\n" + 
                           "Verified：${env.GIT_COMMIT}\n" +
                           "详情：${env.BUILD_URL}"
 

@@ -1,0 +1,16 @@
+name: Test Feishu Webhook
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Test Message
+        env:
+          WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d '{"msg_type":"text","content":{"text":"测试"}}'

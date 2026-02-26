@@ -1,0 +1,90 @@
+name: AWS Monthly Cost Report
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # UTC 06:20 = 中国时间 14:20
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_BILL_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_BILL_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install jq -y
+
+      - name: Generate Cost Report
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          FIRST_DAY=$(date +%Y-%m-01)
+          LAST_DAY=$(date -d "$(date +%Y-%m-01) +1 month -1 day" +%Y-%m-%d)
+          TOMORROW=$(date -d "+1 day" +%Y-%m-%d)
+
+          # 获取当月已使用金额（1号到今天）
+          CURRENT=$(aws ce get-cost-and-usage \
+            --time-period Start=$FIRST_DAY,End=$TODAY \
+            --granularity MONTHLY \
+            --metrics "UnblendedCost" \
+            --query "ResultsByTime[0].Total.UnblendedCost.Amount" \
+            --output text 2>/dev/null || echo "0")
+
+          # 获取整月预测金额（从明天到月底，AWS 会返回整个月的预测）
+          FORECAST_JSON=$(aws ce get-cost-forecast \
+            --time-period Start=$TOMORROW,End=$LAST_DAY \
+            --metric "UNBLENDED_COST" \
+            --granularity "MONTHLY" \
+            --output json 2>/dev/null || echo '{"Total":{"Amount":"0"}}')
+
+          # 提取 Total.Amount
+          FORECAST=$(echo "$FORECAST_JSON" | jq -r '.Total.Amount // "0"')
+
+          # 如果预测失败，用已使用金额
+          if [ "$FORECAST" == "None" ] || [ -z "$FORECAST" ] || [ "$FORECAST" == "0" ]; then
+            FORECAST=$CURRENT
+          fi
+
+          # 获取服务明细
+          SERVICES=$(aws ce get-cost-and-usage \
+            --time-period Start=$FIRST_DAY,End=$TODAY \
+            --granularity MONTHLY \
+            --metrics "UnblendedCost" \
+            --group-by Type=DIMENSION,Key=SERVICE 2>/dev/null || echo '{"ResultsByTime":[{"Groups":[]}]}')
+
+          SERVICE_LIST=$(echo "$SERVICES" | jq -r '
+            .ResultsByTime[0].Groups // []
+            | map(select(.Metrics.UnblendedCost.Amount | tonumber > 1))
+            | sort_by(.Metrics.UnblendedCost.Amount | tonumber)
+            | reverse
+            | .[:10]
+            | .[] 
+            | "• \(.Keys[0]): $\(.Metrics.UnblendedCost.Amount | tonumber | floor)"
+          ')
+
+          if [ -z "$SERVICE_LIST" ]; then
+            SERVICE_LIST="暂无详细数据"
+          fi
+
+          # 已使用和预测都保留两位小数
+          CURRENT_FMT=$(echo "$CURRENT" | awk '{printf "%.2f", $1}')
+          FORECAST_FMT=$(echo "$FORECAST" | awk '{printf "%.2f", $1}')
+
+          MESSAGE=$(printf "🧾 AWS 账单播报（%s月）\n\n📊 当月已使用（1号至今）: $%s\n🔮 当月预测总额: $%s\n\n🛠️ 服务明细（Top 10）:\n%s" "$(date +%m)" "$CURRENT_FMT" "$FORECAST_FMT" "$SERVICE_LIST")
+
+          JSON_PAYLOAD=$(jq -n --arg text "$MESSAGE" '{"msg_type": "text", "content": {"text": $text}}')
+
+          curl -X POST "${{ secrets.FEISHU_WEBHOOK_URL_TEST }}" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD"

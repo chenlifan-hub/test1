@@ -2,7 +2,7 @@ name: AWS Monthly Cost Report test
 
 on:
   schedule:
-    - cron: '35 6 * * *'  
+    - cron: '26 2 * * *'  
   workflow_dispatch:
 
 jobs:
